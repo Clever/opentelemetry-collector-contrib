@@ -5,6 +5,7 @@ package fluentforwardreceiver // import "github.com/open-telemetry/opentelemetry
 
 import (
 	"context"
+	"time"
 
 	"go.opencensus.io/stats"
 	"go.opentelemetry.io/collector/consumer"
@@ -64,10 +65,16 @@ func (c *Collector) processEvents(ctx context.Context) {
 }
 
 func (c *Collector) fillBufferUntilChanEmpty(dest plog.LogRecordSlice) {
-	for {
+
+	timer := time.NewTimer(time.Second * 3)
+	defer timer.Stop()
+
+	for i := 0; i < 5; i++ {
 		select {
 		case e := <-c.eventCh:
 			e.LogRecords().MoveAndAppendTo(dest)
+		case <-timer.C:
+			return
 		default:
 			return
 		}
