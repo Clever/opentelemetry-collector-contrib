@@ -151,6 +151,7 @@ func parseRecordToLogRecord(dc *msgp.Reader, lr plog.LogRecord) error {
 		return msgp.WrapError(err, "Record")
 	}
 
+	attributes := map[string]any{}
 	for recordLen > 0 {
 		recordLen--
 		key, err := dc.ReadString()
@@ -172,11 +173,11 @@ func parseRecordToLogRecord(dc *msgp.Reader, lr plog.LogRecord) error {
 		if key == "message" || key == "log" {
 			parseToAttributeValue(val, lr.Body())
 		} else {
-			parseToAttributeValue(val, lr.Attributes().PutEmpty(key))
+			attributes[key] = val
 		}
 	}
 
-	return nil
+	return lr.Attributes().FromRaw(attributes)
 }
 
 type MessageEventLogRecord struct {
@@ -208,8 +209,8 @@ func (melr *MessageEventLogRecord) DecodeMsg(dc *msgp.Reader) error {
 
 	log := melr.LogRecordSlice.AppendEmpty()
 	attrs := log.Attributes()
-	attrs.PutStr(tagAttributeKey, tag)
 	err = parseRecordToLogRecord(dc, log)
+	attrs.PutStr(tagAttributeKey, tag)
 	if err != nil {
 		return err
 	}
