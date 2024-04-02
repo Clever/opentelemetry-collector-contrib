@@ -133,7 +133,7 @@ func timeFromTimestamp(ts any) (time.Time, error) {
 	}
 }
 
-func parseRecordToLogRecord(dc *msgp.Reader, lr plog.LogRecord) error {
+func parseRecordToLogRecord(dc *msgp.Reader, lr plog.LogRecord, tag string) error {
 	tsIntf, err := dc.ReadIntf()
 	if err != nil {
 		return msgp.WrapError(err, "Time")
@@ -152,6 +152,7 @@ func parseRecordToLogRecord(dc *msgp.Reader, lr plog.LogRecord) error {
 	}
 
 	attributes := map[string]any{}
+	attributes[tagAttributeKey] = tag
 	for recordLen > 0 {
 		recordLen--
 		key, err := dc.ReadString()
@@ -208,9 +209,7 @@ func (melr *MessageEventLogRecord) DecodeMsg(dc *msgp.Reader) error {
 	}
 
 	log := melr.LogRecordSlice.AppendEmpty()
-	attrs := log.Attributes()
-	err = parseRecordToLogRecord(dc, log)
-	attrs.PutStr(tagAttributeKey, tag)
+	err = parseRecordToLogRecord(dc, log, tag)
 	if err != nil {
 		return err
 	}
@@ -279,11 +278,10 @@ func (fe *ForwardEventLogRecords) DecodeMsg(dc *msgp.Reader) error {
 	for i := 0; i < int(entryLen); i++ {
 		lr := fe.LogRecordSlice.AppendEmpty()
 
-		err = parseEntryToLogRecord(dc, lr)
+		err = parseEntryToLogRecord(dc, lr, tag)
 		if err != nil {
 			return msgp.WrapError(err, "Entries", i)
 		}
-		lr.Attributes().PutStr(tagAttributeKey, tag)
 	}
 
 	if arrLen == 3 {
@@ -294,7 +292,7 @@ func (fe *ForwardEventLogRecords) DecodeMsg(dc *msgp.Reader) error {
 	return nil
 }
 
-func parseEntryToLogRecord(dc *msgp.Reader, lr plog.LogRecord) error {
+func parseEntryToLogRecord(dc *msgp.Reader, lr plog.LogRecord, tag string) error {
 	arrLen, err := dc.ReadArrayHeader()
 	if err != nil {
 		return err
@@ -302,7 +300,7 @@ func parseEntryToLogRecord(dc *msgp.Reader, lr plog.LogRecord) error {
 	if arrLen != 2 {
 		return msgp.ArrayError{Wanted: 2, Got: arrLen}
 	}
-	return parseRecordToLogRecord(dc, lr)
+	return parseRecordToLogRecord(dc, lr, tag)
 }
 
 type PackedForwardEventLogRecords struct {
@@ -393,14 +391,13 @@ func (pfe *PackedForwardEventLogRecords) parseEntries(entriesRaw []byte, isGzipp
 	// Allocate only once, since the MoveTo cleans the lr, so we can reuse.
 	lr := plog.NewLogRecord()
 	for {
-		err := parseEntryToLogRecord(msgpReader, lr)
+		err := parseEntryToLogRecord(msgpReader, lr, tag)
 		if err != nil {
 			if errors.Is(msgp.Cause(err), io.EOF) {
 				return nil
 			}
 			return err
 		}
-		lr.Attributes().PutStr(tagAttributeKey, tag)
 		lr.MoveTo(pfe.LogRecordSlice.AppendEmpty())
 	}
 }
